@@ -85,16 +85,19 @@ class GMM():
             self.sigmas=np.zeros(self.n_mixture)
             self.weights=np.zeros(self.n_mixture)
             self.normalizations=np.zeros(self.n_mixture)
-            base_tone=15
-            base_sigma=1
+            self.base_tone=15
+            self.base_sigma=1
             for i in range(0,self.n_harmonics):
-                self.means[i]=(i+1)*base_tone
-                self.sigmas[i]=(i/8+1)*base_sigma#sigmas get bigger for larger harmonics (less absolut freq. reso.)
+                self.means[i]=(i+1)*self.base_tone
+                self.sigmas[i]=(i/8+1)*self.base_sigma#sigmas get bigger for larger harmonics (less absolut freq. reso.)
                 self.weights[i]=1*(2-i/self.n_harmonics)#weights become smaller for larger harmonics
                 self.normalizations[i]=np.sqrt(2*np.pi)/self.sigmas[i]
-            self.means[self.n_harmonics:]=np.linspace(25,100,self.n_mixture-self.n_harmonics)#elemnts of [10,120]
-            self.sigmas[self.n_harmonics:]=np.random.rand(self.n_mixture-self.n_harmonics)*5+3#eleements of [3,8]
-            self.weights[self.n_harmonics:]=np.random.rand(self.n_mixture-self.n_harmonics)+0.1#eleements of [0.1,1.1]
+            # self.means[self.n_harmonics:]=np.linspace(self.base_tone*(self.n_harmonics+1),110,self.n_mixture-self.n_harmonics)
+            # for j in range(self.n_harmonics,self.n_mixture):
+            #     self.means[j]=self.base_tone*(1/2+(self.n_harmonics-j+self.n_harmonics))
+            self.check_additional_gaussians(init=True)
+            self.sigmas[self.n_harmonics:]=3
+            self.weights[self.n_harmonics:]=0.5
             self.weights/=np.sum(self.weights)
             for i in range(self.n_harmonics,self.n_mixture):
                 self.normalizations[i]=1/np.sqrt((2*np.pi))/self.sigmas[i]
@@ -117,10 +120,91 @@ class GMM():
         else:
             if self.verbose:
                 print('Using given initial parameters....')
+
+        # self.sigmas[-1]=4    
+        # print(self.means)
+        # print(self.sigmas)
+        # print(self.weights)
+        # means=np.copy(self.means)
+        # sigmas=np.copy(self.sigmas)
+        # weights=np.copy(self.weights)
+        # self.means[-1]=means[-2]
+        # self.means[-2]=means[-1]
+        # self.sigmas[-1]=sigmas[-2]
+        # self.sigmas[-2]=sigmas[-1]
+        # self.weights[-1]=weights[-2]
+        # self.weights[-2]=weights[-1]
+        # print(self.means)
+        # print(self.sigmas)
+        # print(self.weights)
+        # self.check_additional_gaussians()
+        # print(self.means)
+        # print(self.sigmas)
+        # print(self.weights)
         if np.abs(np.sum(self.weights)-1)>1e-8:
             raise ValueError('weights are not well initialized: '+str(self.weights)+' sum to: '+str(np.sum(self.weights)))
 
-    def fit(self,x,collapse=None,l=0.5,art_init=False):
+    def check_additional_gaussians(self,init=False):
+        #this is written for 4 hamronics and 3 additional Gaussians
+        #the first is between harmonic component 2 and 3
+        #the second between harmonic compontn 3 and 4
+        #and the last two above the hightest hamronics
+        reinit=False
+        if init==True:
+            if self.n_harmonics!=4 or self.n_mixture!=8:
+                raise ValueError('the number of harmonics and additional gaussians must be 4')
+            self.means[4]=(self.means[1]+self.means[2])/2
+            self.means[5]=(self.means[2]+self.means[3])/2
+            self.means[6]=self.means[3]+20
+            self.means[7]=self.means[3]+40
+        else:
+            # #if the order is not correct, just reinitialize them
+            # if not self.means[1]<self.means[4]<self.means[2] or abs(self.means[4]-self.means[1])<1 or abs(self.means[4]-self.means[2])<1:
+            #     self.means[4]=(self.means[1]+self.means[2])/2
+            #     reinit=True
+            # if not self.means[2]<self.means[5]<self.means[3] or abs(self.means[5]-self.means[2])<1 or abs(self.means[5]-self.means[3])<1:
+            #     self.means[5]=(self.means[2]+self.means[3])/2
+            #     reinit=True
+            # if self.means[6]<self.means[3] or abs(self.means[6]-self.means[3])<1:
+            #     self.means[6]=self.means[3]+10
+            #     reinit=True
+            # if self.means[7]<self.means[6]:
+            #     self.means[7]=self.means[6]+10
+            #     reinit=True
+            #-----
+            #if the order is not correct, just reinitialize them
+            # if not self.means[1]<self.means[4]<self.means[2]:
+            #     self.means[4]=(self.means[1]+self.means[2])/2
+            #     reinit=True
+            # if not self.means[2]<self.means[5]<self.means[3]:
+            #     self.means[5]=(self.means[2]+self.means[3])/2
+            #     reinit=True
+            # if self.means[6]<self.means[3]:
+            #     self.means[6]=self.means[3]+10
+            #     reinit=True
+            # if self.means[7]<self.means[6]:
+            #     self.means[7]=self.means[6]+10
+            #     reinit=True
+            # if reinit==True:
+            #-------
+            #just keep track of the order
+            if not self.means[4]<self.means[5]<self.means[6]<self.means[7]:
+                sorted_idx=np.argsort(self.means[4:])
+                self.means[4:]=np.sort(self.means[4:])
+                unsorted_sigmas=np.copy(self.sigmas[4:])
+                unsorted_weights=np.copy(self.weights[4:])
+                self.sigmas[4:]=unsorted_sigmas[sorted_idx]
+                self.weights[4:]=unsorted_weights[sorted_idx]
+                print('resorted the additional gaussians')
+
+        # if reinit==True:
+        #     print('reinit: '+str(self.means))
+        return reinit
+
+
+
+
+    def fit(self,x,collapse=None,l=0.5,art_init=False,pull=0,tie_harmonic_var=True):
         #x is a np array of shape (N,D), where N is the # of data points and D the dimension
         #collapse: the covariance matrix feels a force towards a small values if 
         #the squarroot of the determinant is smaller than collapse*2. The force points
@@ -134,48 +218,67 @@ class GMM():
         start_time = time.time()
         print_time=self.print_every
         LL=[-1e10]
-        LL.append(self.score(x))
+        init_score=self.score(x)
+        if init_score<-10000:
+            self.init_params(x,art_init=True)
+            print('reinitializing parameter because of low initial score.')
+        LL.append(init_score)
         improvement=(LL[-1]-LL[-2])/np.abs(LL[-2])
         iter=0
         weights=np.ones(self.n_harmonics)
+        pull_nonharmonics=0.1
+        pull_sigma=0.5
         for i in range(self.n_harmonics):
             weights[i]/=(i+1)
+        reinit=False#if we need to reinizialize some parameters, we need to correct the improvement
         while improvement>self.crit and iter<self.n_iter:
             #----E-step:
             gamma=self.get_responsibilities(x)
             #----M-step:
             s_gamma=np.sum(gamma,axis=0)
-            #---weights----
+            #---weights-----------
             self.weights=s_gamma/N
-            #---means---
+            #---means-------
             #tie the harmonics together
-            old_means=self.means
             new_means=np.einsum('nm,n->m',gamma,x)/s_gamma
-            d_mean=new_means-old_means
+            d_mean=new_means-self.means
             d_harmonics=np.average(d_mean[0:self.n_harmonics],weights=weights)
             for i in range(0,self.n_harmonics):
-                new_means[i]=old_means[i]+d_harmonics*(i+1)
+                new_means[i]=self.means[i]+d_harmonics*(i+1)
+            #bias the non_harmonics to be between the harmonics
+            for j in range(self.n_harmonics,self.n_mixture):
+                new_means[j]=pull_nonharmonics*(j*20-40)+(1-pull_nonharmonics)*(self.means[j]+d_mean[j])
             #check if still in harmonic range
-            if new_means[0]>35:
-                print('Warning: The base tone seems unnaturally high: '+str(new_means[0])+' We throw it down')
-                base_tone=15
+            if new_means[0]>40 or new_means[0]<4:
+                print('Warning: The base tone seems unnaturally high or low: '+str(new_means[0])+' We throw it back to 15')
                 for i in range(0,self.n_harmonics):
-                    self.means[i]=(i+1)*base_tone
+                    new_means[i]=(i+1)*self.base_tone
+                reinit=True
             self.means=new_means
+            self.check_additional_gaussians()
             #---sigmas----
-            old_sigmas=self.sigmas
+            old_sigmas=np.copy(self.sigmas)
             for m in range(0,self.n_mixture):
                 x_min_mu_m=(x-self.means[m])
                 empirical_vars=np.einsum('n,n->n',x_min_mu_m,x_min_mu_m)
                 new_sigma=np.sqrt(np.einsum('n,n',gamma[:,m],empirical_vars)/s_gamma[m])
-                if new_sigma<0.1:
-                    print('Warning! component: '+str(m+1)+' was in dangeour to collapse. We blowed it up again.')
-                    new_sigma=1.5
                 self.sigmas[m]=new_sigma
             d_sigma=self.sigmas-old_sigmas
-            d_harmonics=np.average(d_sigma[0:self.n_harmonics],weights=weights)
-            for i in range(0,self.n_harmonics):
-                self.sigmas[i]=old_sigmas[i]+d_harmonics*(i/8+1)
+
+            if tie_harmonic_var==True:
+                d_harmonics=np.average(d_sigma[0:self.n_harmonics],weights=weights)
+                for i in range(0,self.n_harmonics):
+                    self.sigmas[i]=pull*((i/8+1)*self.base_sigma)+(1-pull)*(old_sigmas[i]+d_harmonics*(i/8+1))
+            else:
+                for i in range(0,self.n_harmonics):
+                    self.sigmas[i]=pull*((i/8+1)*self.base_sigma)+(1-pull)*(old_sigmas[i]+d_sigma[i])
+            for j in range(self.n_harmonics,self.n_mixture):
+                self.sigmas[j]=pull_sigma*2*(j-self.n_harmonics+1)/2+(1-pull_sigma)*(self.sigmas[j])
+            for i in range(self.n_mixture):
+                if self.sigmas[i]<0.1:
+                    print('Warning! component: '+str(m+1)+' was in dangeour to collapse. We blowed it up again.')
+                    self.sigmas[i]=1.5
+                    reinit=True
             self.normalizations=1/np.sqrt((2*np.pi))/self.sigmas
 
 
@@ -188,8 +291,12 @@ class GMM():
             #         new_sigma=1.5
                 # self.sigmas[m]=new_sigma
                 # self.normalizations[m]=1/np.sqrt((2*np.pi))/self.sigmas[m]
-            LL.append(self.score(x))                
-            improvement=(LL[-1]-LL[-2])/np.abs(LL[-2])
+            LL.append(self.score(x))   #likelihood with inertia 
+            if reinit==False:            
+                improvement=(LL[-1]-LL[-2])/np.abs(LL[-2])
+            else: 
+                improvement=2*self.crit #improvement such that the while loop does not stop
+                reinit=False
             current_time=time.time()-start_time
             if current_time>print_time and self.verbose:
                 print('Epoch: '+str(iter)+', Training time: '+str(int(current_time))+'s, Likelihood: '+str(LL[iter+1])+', last improvement: '+str(improvement))
@@ -236,6 +343,8 @@ class GMM():
         #             sample[i,:]=sample_point
         #             i+=1
         for i in range(n):
+            if self.sigmas[components[i]]<0.01:
+                print('the sigma in component '+str(components[i])+' is too small: '+str(self.sigmas[components[i]]))
             sample[i]=np.random.normal(self.means[components[i]],self.sigmas[components[i]],1)
         return sample
 
